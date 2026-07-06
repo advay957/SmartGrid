@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Grid Enterprise - Control Center</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Navigation -->
+        <header class="app-header">
+            <div class="logo-area">
+                <i class="fa-solid fa-bolt logo-icon"></i>
+                <div class="logo-text">
+                    <h1>SmartGrid</h1>
+                    <span>ENTERPRISE CONTROL</span>
+                </div>
+            </div>
+            <div class="status-indicator">
+                <span id="ws-status" class="badge disconnected">
+                    <i class="fa-solid fa-circle-dot"></i> Connecting...
+                </span>
+                <span id="clock-display" class="badge clock">
+                    <i class="fa-regular fa-clock"></i> 00:00:00 UTC
+                </span>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Content -->
+        <main class="dashboard-grid">
+            
+            <!-- COLUMN 1: LIVE STATUS & CONTROLS -->
+            <section class="dash-column col-left">
+                <!-- Grid Health & Stability KPI Card -->
+                <div class="card kpi-card glass">
+                    <div class="card-header">
+                        <h2>Grid Stability Index</h2>
+                        <i class="fa-solid fa-gauge-high icon-accent"></i>
+                    </div>
+                    <div class="stability-gauge-container">
+                        <div class="stability-value" id="stability-value">--%</div>
+                        <div class="stability-bar-outer">
+                            <div class="stability-bar-inner" id="stability-bar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="grid-status-badge" id="grid-status-badge">STABLE</div>
+                </div>
+
+                <!-- Live Power Indicators -->
+                <div class="card metrics-grid glass">
+                    <div class="metric-item demand">
+                        <span class="label">Total Demand</span>
+                        <div class="value" id="val-demand">0.00 kW</div>
+                        <i class="fa-solid fa-arrow-trend-up mini-icon"></i>
+                    </div>
+                    <div class="metric-item generation">
+                        <span class="label">Green Generation</span>
+                        <div class="value" id="val-generation">0.00 kW</div>
+                        <i class="fa-solid fa-solar-panel mini-icon"></i>
+                    </div>
+                    <div class="metric-item net-load">
+                        <span class="label">Net Grid Load</span>
+                        <div class="value" id="val-net-load">0.00 kW</div>
+                        <i class="fa-solid fa-network-wired mini-icon"></i>
+                    </div>
+                </div>
+
+                <!-- Grid Physics KPIs -->
+                <div class="card metrics-grid glass secondary">
+                    <div class="metric-item voltage">
+                        <span class="label">Avg Voltage</span>
+                        <div class="value" id="val-voltage">230.0 V</div>
+                    </div>
+                    <div class="metric-item frequency">
+                        <span class="label">Frequency</span>
+                        <div class="value" id="val-frequency">50.000 Hz</div>
+                    </div>
+                </div>
+
+                <!-- Battery Storage Control (BESS) -->
+                <div class="card bess-card glass">
+                    <div class="card-header">
+                        <h2>BESS Storage Unit</h2>
+                        <span class="battery-charge-direction" id="battery-status-text">IDLE</span>
+                    </div>
+                    
+                    <div class="bess-status-row">
+                        <div class="battery-visual-container">
+                            <div class="battery-body">
+                                <div class="battery-level" id="battery-level" style="height: 50%;"></div>
+                            </div>
+                            <span class="battery-percentage" id="battery-percent">50%</span>
+                        </div>
+                        <div class="battery-numerical-stats">
+                            <div>
+                                <span class="sub-label">Stored Energy</span>
+                                <div class="sub-val" id="battery-soc-kwh">-- kWh</div>
+                            </div>
+                            <div>
+                                <span class="sub-label">Charge Rate</span>
+                                <div class="sub-val" id="battery-power-kw">-- kW</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- BESS Savings / Arbitrage -->
+                    <div class="savings-container">
+                        <div class="saving-item">
+                            <span class="label">Savings Today</span>
+                            <span class="val text-green" id="savings-val">$0.00</span>
+                        </div>
+                        <div class="saving-item">
+                            <span class="label">CO₂ Offset</span>
+                            <span class="val text-green" id="co2-val">0.00 kg</span>
+                        </div>
+                    </div>
+
+                    <!-- Battery Mode Control Form -->
+                    <div class="bess-control-panel">
+                        <h3>Operating Mode</h3>
+                        <div class="mode-buttons">
+                            <button class="btn mode-btn active" data-mode="auto">Auto</button>
+                            <button class="btn mode-btn" data-mode="charge">Manual Charge</button>
+                            <button class="btn mode-btn" data-mode="discharge">Manual Discharge</button>
+                            <button class="btn mode-btn" data-mode="idle">Idle</button>
+                        </div>
+                        <div class="manual-override-inputs" id="manual-override-inputs" style="display:none;">
+                            <label for="override-power">Override Power (kW):</label>
+                            <div class="slider-input-group">
+                                <input type="range" id="override-power-slider" min="0" max="250" value="100">
+                                <span id="override-power-val">100 kW</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- COLUMN 2: POWER FLOW & FORECASTING -->
+            <section class="dash-column col-center">
+                <!-- Dynamic Power Flow Visualizer -->
+                <div class="card flow-card glass">
+                    <div class="card-header">
+                        <h2>Real-time Grid Power Flow</h2>
+                        <span class="sub-header-info">Visualizing supply-demand distribution</span>
+                    </div>
+                    <div class="grid-flow-diagram">
+                        <div class="flow-node generation-node">
+                            <i class="fa-solid fa-solar-panel"></i>
+                            <span>Generation</span>
+                            <div class="node-power" id="flow-val-gen">0 kW</div>
+                        </div>
+
+                        <div class="flow-lines-container">
+                            <div class="flow-line left-to-center" id="line-gen-hub">
+                                <div class="pulse"></div>
+                            </div>
+                            <div class="flow-line right-to-center" id="line-consumer-hub">
+                                <div class="pulse"></div>
+                            </div>
+                            <div class="flow-line battery-to-hub" id="line-bess-hub">
+                                <div class="pulse"></div>
+                            </div>
+                        </div>
+
+                        <div class="flow-node hub-node">
+                            <i class="fa-solid fa-circle-nodes"></i>
+                            <span>Grid Node</span>
+                            <div class="node-power" id="flow-val-net">0 kW</div>
+                        </div>
+
+                        <div class="flow-node consumer-node">
+                            <i class="fa-solid fa-city"></i>
+                            <span>Consumers</span>
+                            <div class="node-power" id="flow-val-dem">0 kW</div>
+                        </div>
+
+                        <div class="flow-node battery-node">
+                            <i class="fa-solid fa-battery-three-quarters"></i>
+                            <span>BESS BESS</span>
+                            <div class="node-power" id="flow-val-bess">0 kW</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Machine Learning Forecasting Chart -->
+                <div class="card chart-card glass">
+                    <div class="card-header">
+                        <h2>ML Time-Series Forecasting</h2>
+                        <div class="chart-controls">
+                            <button class="btn chart-btn active" id="btn-load-forecast">24h Forecast</button>
+                            <button class="btn chart-btn" id="btn-force-train"><i class="fa-solid fa-arrows-rotate"></i> Refresh Model</button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="forecastChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- COLUMN 3: METER INVENTORY & SIMULATOR CONTROLLER -->
+            <section class="dash-column col-right">
+                <!-- Grid Simulator Controller -->
+                <div class="card simulator-card glass">
+                    <div class="card-header">
+                        <h2>Grid Simulator</h2>
+                        <i class="fa-solid fa-sliders icon-accent"></i>
+                    </div>
+                    
+                    <div class="sim-control-group">
+                        <div class="control-label-row">
+                            <span>Consumer Load Spike:</span>
+                            <span class="control-badge" id="lbl-load-mult">1.0x</span>
+                        </div>
+                        <input type="range" id="slider-load-mult" min="0.5" max="2.5" step="0.1" value="1.0">
+                    </div>
+
+                    <div class="sim-control-group">
+                        <div class="control-label-row">
+                            <span>Solar Generation Factor:</span>
+                            <span class="control-badge" id="lbl-solar-mult">100%</span>
+                        </div>
+                        <input type="range" id="slider-solar-mult" min="0.0" max="1.5" step="0.1" value="1.0">
+                    </div>
+
+                    <div class="sim-actions">
+                        <button class="btn btn-warning" id="btn-toggle-fault">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Inject Voltage/Freq Grid Fault
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Smart Meter Inventory -->
+                <div class="card inventory-card glass">
+                    <div class="card-header">
+                        <h2>Smart Meter Nodes</h2>
+                        <button class="btn add-meter-btn" id="btn-open-meter-modal">
+                            <i class="fa-solid fa-plus"></i> Add Node
+                        </button>
+                    </div>
+                    <div class="meter-list" id="meter-list">
+                        <!-- Filled dynamically -->
+                        <div class="meter-list-empty">Loading smart meters...</div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Modals: Add Smart Meter -->
+        <div class="modal-backdrop" id="add-meter-modal" style="display:none;">
+            <div class="modal-content glass">
+                <div class="modal-header">
+                    <h2>Commission New Smart Meter</h2>
+                    <button class="btn-close" id="btn-close-meter-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <form id="add-meter-form">
+                    <div class="form-group">
+                        <label for="meter-name">Node Name / Identifier</label>
+                        <input type="text" id="meter-name" required placeholder="e.g. Substation Sector D">
+                    </div>
+                    <div class="form-group">
+                        <label for="meter-type">Node Grid Category</label>
+                        <select id="meter-type" required>
+                            <option value="consumer">Consumer (Loads electricity)</option>
+                            <option value="generator">Generator (Solar, Wind, Battery input)</option>
+                            <option value="prosumer">Prosumer (Solar home, bidirectional)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="meter-capacity">Max Connection Capacity (kW)</label>
+                        <input type="number" id="meter-capacity" min="1" max="10000" value="50" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="meter-location">Geographic Location / Zone</label>
+                        <input type="text" id="meter-location" placeholder="e.g. West Fields">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-submit">Commission Node</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Real-time Activity Logs Console at Bottom -->
+        <footer class="app-console glass">
+            <div class="console-header">
+                <h3><i class="fa-solid fa-terminal"></i> Activity Log Console</h3>
+                <span class="console-actions" id="clear-console">Clear Log</span>
+            </div>
+            <div class="console-logs" id="console-logs">
+                <div class="log-line system">[SYSTEM] Grid Enterprise Monitoring console initialized. Ready.</div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- App Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
