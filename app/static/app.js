@@ -1,5 +1,6 @@
-// --- App State & Globals ---
+// --- App State & Chart Globals ---
 let socket = null;
+let forecastChart = null;
 const consoleLogs = document.getElementById("console-logs");
 let isFaultActive = false;
 
@@ -68,6 +69,9 @@ async function fetchInitialData() {
         // Fetch active meters
         fetchMeterList();
         
+        // Load ML forecasts and draw charts
+        fetchForecast();
+        
         // Fetch initial battery status
         fetchBatteryStatus();
     } catch (err) {
@@ -93,6 +97,17 @@ async function fetchBatteryStatus() {
         updateBatteryUI(bess);
     } catch (err) {
         console.error("Failed to fetch battery status:", err);
+    }
+}
+
+async function fetchForecast() {
+    try {
+        const res = await fetch("/api/forecast?horizon=24");
+        const forecastData = await res.json();
+        renderForecastChart(forecastData);
+        logConsole("Machine learning forecasting models re-evaluated.", "system");
+    } catch (err) {
+        logConsole(`ML Forecast calculation failed: ${err.message}`, "alert");
     }
 }
 
@@ -301,6 +316,7 @@ function renderMeterList(meters) {
     
     list.innerHTML = "";
     meters.forEach(node => {
+        // Sometimes websocket lists full telemetry dict, sometimes fetch lists empty initial state
         const tel = node.telemetry || { active_power_kw: 0.0, status: "online" };
         const power = tel.active_power_kw || 0.0;
         const powerClass = power > 0 ? "load" : (power < 0 ? "gen" : "");
@@ -331,6 +347,75 @@ function updateControlSlidersUI(controls) {
     
     document.getElementById("slider-solar-mult").value = controls.solar_multiplier;
     document.getElementById("lbl-solar-mult").textContent = `${(controls.solar_multiplier * 100).toFixed(0)}%`;
+}
+
+// --- Forecast Charting ---
+function renderForecastChart(data) {
+    const ctx = document.getElementById("forecastChart").getContext("2d");
+    
+    const labels = data.forecasts.map(f => {
+        const time = new Date(f.timestamp);
+        return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    });
+    
+    const demandPred = data.forecasts.map(f => f.predicted_demand_kw);
+    const genPred = data.forecasts.map(f => f.predicted_generation_kw);
+    
+    if (forecastChart) {
+        forecastChart.destroy();
+    }
+    
+    forecastChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'ML Demand Prediction (kW)',
+                    data: demandPred,
+                    borderColor: 'hsl(180, 85%, 50%)',
+                    backgroundColor: 'hsla(180, 85%, 50%, 0.05)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'ML Solar Prediction (kW)',
+                    data: genPred,
+                    borderColor: 'hsl(145, 80%, 45%)',
+                    backgroundColor: 'hsla(145, 80%, 45%, 0.05)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    fill: true,
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: 'hsl(215, 15%, 70%)',
+                        font: { family: 'Outfit', size: 11 }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { color: 'hsl(215, 10%, 50%)', font: { family: 'Outfit', size: 10 } }
+                },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                    ticks: { color: 'hsl(215, 10%, 50%)', font: { family: 'JetBrains Mono', size: 10 } }
+                }
+            }
+        }
+    });
 }
 
 // --- Event Handlers & API triggers ---
@@ -387,6 +472,7 @@ function setupEventListeners() {
         const val = parseFloat(e.target.value);
         document.getElementById("override-power-val").textContent = `${val.toFixed(0)} kW`;
         
+        // Find active manual mode (charge or discharge)
         let activeMode = "idle";
         document.querySelectorAll(".mode-btn").forEach(btn => {
             if (btn.classList.contains("active")) {
@@ -438,7 +524,8 @@ function setupEventListeners() {
                 logConsole(`Successfully commissioned new meter: ${payload.name} [${payload.type.toUpperCase()}]`, "success");
                 modal.style.display = "none";
                 meterForm.reset();
-                fetchMeterList();
+                fetchMeterList(); // refresh the list
+                fetchForecast();   // ML model might adjust features
             } else {
                 throw new Error("Validation mismatch");
             }
@@ -447,7 +534,12 @@ function setupEventListeners() {
         }
     });
     
-    // 5. Console clear
+    // 5. ML re-train button
+    document.getElementById("btn-force-train").addEventListener("click", () => {
+        fetchForecast();
+    });
+    
+    // 6. Console clear
     document.getElementById("clear-console").addEventListener("click", () => {
         consoleLogs.innerHTML = "";
     });
@@ -474,9 +566,11 @@ function logConsole(message, type = "system") {
     
     consoleLogs.appendChild(logLine);
     
+    // Remove old logs to avoid DOM overload
     while (consoleLogs.children.length > 100) {
         consoleLogs.removeChild(consoleLogs.firstChild);
     }
     
+    // Auto scroll to latest logs
     consoleLogs.scrollTop = consoleLogs.scrollHeight;
 }
